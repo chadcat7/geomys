@@ -63,10 +63,22 @@ func (p *Parser) parseLetStatement() *tree.LetStatement {
 	return statement
 }
 
+func (p *Parser) parseReturnStatement() *tree.ReturnStatement {
+	st := &tree.ReturnStatement{Token: p.currToken}
+	p.nextToken()
+
+	for !p.curTokenIs(token.SEMICOLON) {
+		p.nextToken()
+	}
+	return st
+}
+
 func (p *Parser) ParseStatement() tree.Statement {
 	switch p.currToken.Type {
 	case token.LET:
 		return p.parseLetStatement()
+	case token.RBRACKET:
+		return p.parseReturnStatement()
 	default:
 		return nil
 	}
