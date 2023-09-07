@@ -7,23 +7,55 @@ import (
 	"geomys/tree"
 )
 
+const (
+	_ int = iota
+	LOWEST
+	EQUALS
+	LESSGREATER
+	SUM
+	PRODUCT
+	PREFIX
+	CALL
+)
+
+type (
+	prefixParseFunc func() tree.Expression
+	infixParseFunc  func(tree.Expression) tree.Expression
+)
+
 type Parser struct {
 	l           *lexer.Lexer
 	currToken   token.Token
 	peekedToken token.Token
 	errors      []string
+
+	prefixParseFunc map[token.TokenType]prefixParseFunc
+	infixParseFunc  map[token.TokenType]infixParseFunc
+}
+
+func (p *Parser) registerPrefix(tokenType token.TokenType, fn prefixParseFunc) {
+	p.prefixParseFunc[tokenType] = fn
+}
+
+func (p *Parser) registerInfix(tokenType token.TokenType, fn infixParseFunc) {
+	p.infixParseFunc[tokenType] = fn
 }
 
 func (p *Parser) nextToken() {
 	p.currToken = p.peekedToken
 	p.peekedToken = p.l.AdvanceToken()
 }
-
 func New(l *lexer.Lexer) *Parser {
 	p := &Parser{l: l, errors: []string{}}
 	p.nextToken()
 	p.nextToken()
+	p.prefixParseFunc = make(map[token.TokenType]prefixParseFunc)
+	p.registerInfix(token.IDENT, p.parseIdentifier)
 	return p
+}
+
+func (p *Parser) parseIdentifier() tree.Expression {
+	return &tree.Identifier{Token: p.currToken, Value: p.currToken.Literal}
 }
 
 func (p *Parser) curTokenIs(t token.TokenType) bool {
@@ -73,11 +105,32 @@ func (p *Parser) parseReturnStatement() *tree.ReturnStatement {
 	return st
 }
 
+func (p *Parser) parseExpression(precedence int) tree.Expression {
+	prefix := p.prefixParseFunc[p.currToken.Type]
+	if prefix == nil {
+		return nil
+	}
+	leftExp := prefix()
+	return leftExp
+}
+
+func (p *Parser) parseExpressionStatement() *tree.ExpressionStatement {
+	statement := &tree.ExpressionStatement{Token: p.currToken}
+
+	statement.Expression = p.parseExpression(LOWEST)
+
+	if p.peekTokenIs(token.SEMICOLON) {
+		p.nextToken()
+	}
+
+	return statement
+}
+
 func (p *Parser) ParseStatement() tree.Statement {
 	switch p.currToken.Type {
 	case token.LET:
 		return p.parseLetStatement()
-	case token.RBRACKET:
+	case token.RETURN:
 		return p.parseReturnStatement()
 	default:
 		return nil
